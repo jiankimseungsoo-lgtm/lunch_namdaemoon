@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini API 테스트</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background: #495057;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover { background: #343a40; }
+        #result {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 15px;
+            white-space: pre-wrap;
+        }
+        .loading { color: #666; font-style: italic; }
+        .error { color: #dc3545; background: #f8d7da; }
+        .success { color: #28a745; background: #d4edda; }
+    </style>
+</head>
+<body>
+    <h1>🤖 Gemini API 연동 테스트</h1>
+
+    <div class="test-section">
+        <h3>프롬프트 테스트</h3>
+        <textarea id="test-prompt" placeholder="테스트할 프롬프트를 입력하세요:
+
+예시: 따뜻한 국물 요리가 먹고 싶어"></textarea>
+        <button onclick="testGeminiAPI()">🚀 API 테스트 실행</button>
+        <div id="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h3>API 상태 정보</h3>
+        <p><strong>API 키:</strong> <span id="api-status">확인 중...</span></p>
+        <p><strong>데이터 수:</strong> <span id="data-count">로딩 중...</span></p>
+        <button onclick="checkStatus()">🔍 상태 확인</button>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="gemini-api.js"></script>
+    <script>
+        let testData = [];
+        let geminiAI = null;
+
+        // 페이지 로드 시 초기화
+        document.addEventListener('DOMContentLoaded', async () => {
+            await loadTestData();
+            checkStatus();
+        });
+
+        // 테스트 데이터 로드
+        async function loadTestData() {
+            try {
+                const response = await fetch('./unified_restaurant_datamart.jsonl');
+                const text = await response.text();
+                testData = text.trim().split('\\n')
+                    .filter(line => line.trim())
+                    .map(line => JSON.parse(line));
+
+                console.log('테스트 데이터 로드 완료:', testData.length + '개');
+                document.getElementById('data-count').textContent = testData.length + '개 맛집';
+            } catch (error) {
+                console.error('데이터 로드 실패:', error);
+                document.getElementById('data-count').textContent = '로드 실패';
+            }
+        }
+
+        // API 상태 확인
+        function checkStatus() {
+            const apiKey = API_CONFIG.GEMINI_API_KEY;
+            const statusElement = document.getElementById('api-status');
+
+            if (apiKey && apiKey.length > 20) {
+                statusElement.textContent = '✅ 설정됨 (' + apiKey.substring(0, 8) + '...)';
+                statusElement.className = 'success';
+                geminiAI = new GeminiRecommendation(apiKey);
+            } else {
+                statusElement.textContent = '❌ 미설정';
+                statusElement.className = 'error';
+            }
+        }
+
+        // Gemini API 테스트
+        async function testGeminiAPI() {
+            const resultDiv = document.getElementById('result');
+            const prompt = document.getElementById('test-prompt').value.trim();
+
+            if (!prompt) {
+                resultDiv.innerHTML = '<div class="error">프롬프트를 입력해주세요.</div>';
+                return;
+            }
+
+            if (!geminiAI) {
+                resultDiv.innerHTML = '<div class="error">API 키가 설정되지 않았습니다.</div>';
+                return;
+            }
+
+            if (testData.length === 0) {
+                resultDiv.innerHTML = '<div class="error">테스트 데이터가 로드되지 않았습니다.</div>';
+                return;
+            }
+
+            try {
+                resultDiv.innerHTML = '<div class="loading">🤖 AI 응답 생성 중...</div>';
+
+                console.log('API 테스트 시작:', {
+                    prompt: prompt,
+                    dataCount: testData.length,
+                    apiKeyLength: geminiAI.apiKey.length
+                });
+
+                const startTime = Date.now();
+                const recommendation = await geminiAI.getRecommendation(prompt, testData);
+                const endTime = Date.now();
+
+                console.log('API 응답 완료:', recommendation);
+
+                resultDiv.innerHTML = `
+                    <div class="success">
+                        <h4>✅ API 테스트 성공!</h4>
+                        <p><strong>소요 시간:</strong> ${endTime - startTime}ms</p>
+                        <p><strong>추천 맛집:</strong> ${recommendation.restaurant.name}</p>
+                        <p><strong>추천 이유:</strong> ${recommendation.reason}</p>
+                        <p><strong>팁:</strong> ${recommendation.tips}</p>
+                        <p><strong>AI 추천:</strong> ${recommendation.isAiRecommendation ? '✅' : '❌'}</p>
+                    </div>
+                `;
+
+            } catch (error) {
+                console.error('API 테스트 실패:', error);
+                resultDiv.innerHTML = `
+                    <div class="error">
+                        <h4>❌ API 테스트 실패</h4>
+                        <p><strong>오류:</strong> ${error.message}</p>
+                        <p><strong>자세한 오류:</strong></p>
+                        <pre>${error.stack || 'Stack trace not available'}</pre>
+                    </div>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>점심 맛집 추천기 - 그레이츠숙례 기준</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="app-header">
+            <div class="logo-section">
+                <img src="Jian.png" alt="Jian Logo" class="logo">
+                <div class="header-text">
+                    <h1>점심 맛집 추천</h1>
+                    <p class="subtitle">그레이츠숙례 기준 맛집 큐레이션</p>
+                </div>
+            </div>
+        </header>
+        
+        <!-- 장르 필터 -->
+        <div class="filter-section">
+            <h3>🔍 장르별 추천</h3>
+            <div class="genre-filters">
+                <button class="genre-btn active" data-genre="all">전체</button>
+                <button class="genre-btn" data-genre="한식">한식</button>
+                <button class="genre-btn" data-genre="중식">중식</button>
+                <button class="genre-btn" data-genre="일식">일식</button>
+                <button class="genre-btn" data-genre="양식">양식</button>
+                <button class="genre-btn" data-genre="분식/간식">분식</button>
+                <button class="genre-btn" data-genre="카페/디저트">카페</button>
+                <button class="genre-btn" data-genre="기타">기타</button>
+            </div>
+        </div>
+        
+        <!-- 거리 필터 -->
+        <div class="filter-section">
+            <h3>🚶‍♂️ 거리별 추천</h3>
+            <div class="distance-filters">
+                <button class="distance-btn active" data-distance="all">전체</button>
+                <button class="distance-btn" data-distance="5">5분 이내</button>
+                <button class="distance-btn" data-distance="10">10분 이내</button>
+                <button class="distance-btn" data-distance="15">15분 이내</button>
+            </div>
+        </div>
+        
+        <!-- 결과 카드 -->
+        <div class="card" id="result-card">
+            <p>필터를 선택하고 버튼을 눌러 맛집을 추천받아보세요!</p>
+        </div>
+        
+        <!-- AI 프롬프트 입력 -->
+        <div class="ai-prompt-section">
+            <h3>🤖 AI 맞춤 추천</h3>
+            <div class="prompt-input-group">
+                <textarea
+                    id="user-prompt"
+                    placeholder="원하는 조건을 자유롭게 입력하세요:
+
+예시:
+• 따뜻한 국물 요리가 먹고 싶어
+• 매운 음식 못 먹어서 순한 맛 한식 추천
+• 데이트하기 좋은 분위기 있는 곳
+• 저렴하고 양 많은 중국집
+• 커피랑 디저트 먹을 수 있는 카페"
+                    rows="4"></textarea>
+            </div>
+        </div>
+
+        <!-- 추천 버튼들 -->
+        <div class="button-group">
+            <button id="pick-button">🎲 랜덤 추천</button>
+            <button id="ai-button" class="ai-button">🤖 AI 맞춤 추천</button>
+        </div>
+        
+        <!-- 통계 -->
+        <div class="stats" id="stats">
+            <p>총 <span id="total-count">0</span>개 맛집 | 필터링된 <span id="filtered-count">0</span>개</p>
+        </div>
+    </div>
+
+    <!-- AI 로딩 표시 -->
+    <div id="ai-loading" style="display: none; text-align: center; padding: 2rem;">
+        <p>🤖 AI가 맞춤 추천을 생성 중입니다...</p>
+        <div class="loading-spinner"></div>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="gemini-api.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
