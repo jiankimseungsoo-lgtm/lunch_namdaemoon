@@ -166,11 +166,17 @@ h1 {
     background: #03c75a;
     color: white;
     text-decoration: none;
-    padding: 0.5rem 1rem;
+    padding: 0.6rem 1rem;
     border-radius: 5px;
     font-size: 0.9rem;
     transition: background 0.3s;
     display: inline-block;
+    min-height: 36px;
+    line-height: 1.2;
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .card .naver-link a:hover {

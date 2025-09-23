@@ -26,7 +26,6 @@ class DiningCodePlaywrightScraper:
         self.base_url = "https://www.diningcode.com"
         self.restaurants = []
         self.restaurant_id_counter = 1
-        self.max_items_this_run = None  # 샘플 수집 제한 용도
         
         # 수집할 지역 정보
         self.locations = {
@@ -59,8 +58,8 @@ class DiningCodePlaywrightScraper:
             print(f"   상세 링크 수집: {len(detail_links)}개")
 
             # 상세 페이지 방문하여 데이터 확정 수집 (tqdm 진행률 표시)
-            limit = self.max_items_this_run if isinstance(self.max_items_this_run, int) and self.max_items_this_run > 0 else len(detail_links)
-            for idx, (name, url) in enumerate(tqdm(detail_links[:limit], total=limit, desc=f"{location_name} 상세 수집")):
+            print(f"   [INFO] {len(detail_links)}개 음식점 상세 수집 시작")
+            for idx, (name, url) in enumerate(tqdm(detail_links, total=len(detail_links), desc=f"{location_name} 전체 수집")):
                 try:
                     await page.goto(url, wait_until='domcontentloaded')
                     await page.wait_for_timeout(600)
@@ -170,11 +169,9 @@ class DiningCodePlaywrightScraper:
             location_name = next((loc['name'] for loc in self.locations.values() if loc['url'] == list_url), "")
             try:
                 self.restaurants = []
-                self.max_items_this_run = max(1, int(n))
                 await self.get_restaurant_list(page, list_url, location_name or "")
             finally:
                 await browser.close()
-                self.max_items_this_run = None
             if self.restaurants:
                 self.save_to_jsonl(output)
             else:
@@ -184,17 +181,8 @@ class DiningCodePlaywrightScraper:
         """개선된 더보기 버튼 클릭 및 스크롤링으로 모든 항목을 로드합니다."""
         print("   [INFO] 개선된 로딩 방식 시작...")
 
-        # 페이지 상단 표기 총 개수 파악(맛집 (N곳))
+        # 페이지 상단 표기 총 개수 파악(맛집 (N곳)) - 제한 없이 수집
         target_total = None
-        try:
-            body_text = await page.evaluate('() => document.body && document.body.innerText')
-            if body_text:
-                m = re.search(r"맛집\s*\((\d+)곳\)", body_text)
-                if m:
-                    target_total = int(m.group(1))
-                    print(f"   [TARGET] 목표 수집 개수: {target_total}개")
-        except Exception:
-            pass
 
         # 초기 대기 및 로딩 상태 확인
         await page.wait_for_timeout(3000)
@@ -203,7 +191,7 @@ class DiningCodePlaywrightScraper:
         last_count = 0
         stable_rounds = 0
         iteration = 0
-        max_iterations = 200  # 최대 반복 횟수 줄임
+        max_iterations = 1000
 
         while iteration < max_iterations:
             iteration += 1
@@ -211,10 +199,7 @@ class DiningCodePlaywrightScraper:
             # 현재 음식점 개수 확인 (우선순위 셀렉터 사용)
             current_count = await self.count_current_items(page)
 
-            # 목표 개수에 도달하면 종료
-            if target_total and current_count >= target_total:
-                print(f"   [SUCCESS] 목표 도달: {current_count}/{target_total}개")
-                break
+            # 목표 개수 체크 비활성화 - 제한 없이 수집
 
             # 더보기 버튼 클릭 시도
             more_clicked = await self.handle_more_button(page)
@@ -242,8 +227,9 @@ class DiningCodePlaywrightScraper:
             if iteration % 20 == 0:
                 print(f"   [STATUS] {iteration}회차, 현재: {new_count}개")
 
-            # 안정화 검사: 10번 연속 변화 없으면 종료
-            if stable_rounds >= 10:
+            # 안정화 검사: 목표치에 도달하지 못했으면 더 오래 시도
+            stability_threshold = 50 if target_total and new_count < target_total * 0.8 else 30
+            if stable_rounds >= stability_threshold:
                 print(f"   [COMPLETE] 로딩 완료: 총 {new_count}개 수집 (안정화)")
                 break
 
@@ -274,62 +260,173 @@ class DiningCodePlaywrightScraper:
             return 0
 
     async def handle_more_button(self, page):
-        """더보기 버튼을 찾아서 클릭합니다."""
+        """강화된 더보기 버튼 클릭 로직 - 다양한 방법으로 시도"""
         try:
-            # 다양한 더보기 버튼 텍스트 패턴
-            more_patterns = ['더보기', '더 보기', '20개 더보기', '더보기 20']
+            clicked = False
 
-            for pattern in more_patterns:
-                try:
-                    # get_by_text 사용 (더 안정적)
-                    more_button = page.get_by_text(pattern, exact=False).first
-                    if await more_button.is_visible(timeout=1000):
-                        await more_button.click(timeout=5000)
-                        return True
-                except Exception:
-                    continue
-
-            # 폴백: CSS 셀렉터 방식
-            css_selectors = [
-                'button:has-text("더보기")',
-                'a:has-text("더보기")',
-                '.btn-more',
-                '.more-btn'
+            # 1) 다이닝코드 특화 셀렉터들 (실제 사이트 구조 기반)
+            diningcode_selectors = [
+                '.btn_more',              # 다이닝코드 더보기 버튼 클래스
+                '.more_btn',
+                '.load-more',
+                '.btn-load-more',
+                'button[onclick*="more"]', # onclick에 more가 포함된 버튼
+                'a[onclick*="more"]',      # onclick에 more가 포함된 링크
+                '.paging .more',          # 페이징 영역의 더보기
+                '#btn_more',              # ID 기반
+                '[data-action*="more"]',  # data-action 속성
             ]
 
-            for selector in css_selectors:
+            for selector in diningcode_selectors:
                 try:
-                    element = await page.query_selector(selector)
-                    if element and await element.is_visible():
-                        await element.click()
+                    elements = await page.query_selector_all(selector)
+                    for element in elements:
+                        if element and await element.is_visible():
+                            await element.click()
+                            print(f"   [CLICK] 더보기 버튼 클릭 성공: {selector}")
+                            return True
+                except Exception:
+                    continue
+
+            # 2) 텍스트 기반 매칭 (더 광범위한 패턴)
+            text_patterns = [
+                '더보기', '더 보기', '더보기 20', '20개 더보기', '더 보기 20개',
+                '더 많은', '더 많이', 'more', 'More', 'MORE', 'Load More',
+                '다음 20개', '계속 보기', '추가 보기'
+            ]
+
+            for pattern in text_patterns:
+                try:
+                    # Playwright의 내장 텍스트 찾기 (더 정확함)
+                    locator = page.locator(f"text={pattern}").first
+                    if await locator.is_visible(timeout=500):
+                        await locator.click(timeout=3000)
+                        print(f"   [CLICK] 텍스트 매칭 클릭 성공: {pattern}")
                         return True
                 except Exception:
                     continue
 
+            # 3) XPath 방식 (더 정확한 텍스트 매칭)
+            xpath_patterns = [
+                "//button[contains(text(),'더보기')]",
+                "//a[contains(text(),'더보기')]",
+                "//div[contains(text(),'더보기')]",
+                "//span[contains(text(),'더보기')]",
+                "//button[contains(@class,'more')]",
+                "//a[contains(@class,'more')]",
+            ]
+
+            for xpath in xpath_patterns:
+                try:
+                    element = await page.query_selector(f"xpath={xpath}")
+                    if element and await element.is_visible():
+                        await element.click()
+                        print(f"   [CLICK] XPath 클릭 성공: {xpath}")
+                        return True
+                except Exception:
+                    continue
+
+            # 4) JavaScript 직접 실행 (최후의 수단)
+            try:
+                clicked = await page.evaluate('''() => {
+                    const patterns = ['더보기','더 보기','more','More','load more','Load More'];
+                    const elements = Array.from(document.querySelectorAll('*'));
+
+                    for (const el of elements) {
+                        if (!el.offsetParent) continue; // 숨겨진 요소 제외
+
+                        const text = (el.innerText || el.textContent || '').trim().toLowerCase();
+                        const isClickable = el.tagName.toLowerCase() === 'button' ||
+                                          el.tagName.toLowerCase() === 'a' ||
+                                          el.onclick ||
+                                          el.getAttribute('onclick') ||
+                                          window.getComputedStyle(el).cursor === 'pointer';
+
+                        if (isClickable && patterns.some(p => text.includes(p.toLowerCase()))) {
+                            el.click();
+                            console.log('JS 직접 클릭:', el);
+                            return true;
+                        }
+                    }
+                    return false;
+                }''')
+
+                if clicked:
+                    print(f"   [CLICK] JavaScript 직접 클릭 성공")
+                    return True
+
+            except Exception:
+                pass
+
             return False
-        except Exception:
+
+        except Exception as e:
+            print(f"   [ERROR] 더보기 버튼 클릭 실패: {e}")
             return False
 
     async def scroll_to_load_more(self, page):
-        """스크롤링으로 추가 항목 로딩을 시도합니다."""
+        """강화된 스크롤링으로 추가 항목 로딩을 시도합니다."""
         try:
-            # 페이지 끝까지 스크롤
-            await page.evaluate('() => { window.scrollTo(0, document.body.scrollHeight); }')
-            await page.wait_for_timeout(1000)
+            # 1) 다양한 스크롤 방식 시도
+            scroll_methods = [
+                '() => { window.scrollTo(0, document.body.scrollHeight); }',
+                '() => { window.scrollTo(0, document.documentElement.scrollHeight); }',
+                '() => { document.documentElement.scrollTop = document.documentElement.scrollHeight; }',
+                '() => { window.scrollBy(0, window.innerHeight * 3); }',
+            ]
 
-            # 좌측 리스트 영역 스크롤 (다이닝코드 특성)
-            list_selectors = ['#div_lf', '.list-area', '.left-area']
+            for method in scroll_methods:
+                try:
+                    await page.evaluate(method)
+                    await page.wait_for_timeout(800)
+                except Exception:
+                    continue
+
+            # 2) 다이닝코드 특화 리스트 영역 스크롤
+            list_selectors = [
+                '#div_lf',           # 다이닝코드 좌측 리스트
+                '.list-area',
+                '.left-area',
+                '.dc-list',
+                '.restaurant-list',
+                '.search-results',
+                '.area_lf'
+            ]
+
             for selector in list_selectors:
                 try:
                     element = await page.query_selector(selector)
                     if element:
+                        # 해당 영역으로 스크롤 후 내부 스크롤
+                        await element.scroll_into_view_if_needed()
                         await element.hover()
-                        await page.evaluate('(el) => { el.scrollBy(0, el.clientHeight); }', element)
+
+                        # 여러 번 스크롤 시도
+                        for _ in range(5):
+                            await page.evaluate('(el) => { el.scrollBy(0, el.clientHeight); }', element)
+                            await page.wait_for_timeout(500)
                         break
                 except Exception:
                     continue
 
-        except Exception:
+            # 3) 페이지 끝에서 추가 스크롤 시도 (무한 스크롤 감지)
+            try:
+                await page.keyboard.press('End')
+                await page.wait_for_timeout(1000)
+                await page.keyboard.press('PageDown')
+                await page.wait_for_timeout(1000)
+            except Exception:
+                pass
+
+            # 4) 마우스 휠 시뮬레이션
+            try:
+                await page.mouse.wheel(0, 2000)
+                await page.wait_for_timeout(1000)
+            except Exception:
+                pass
+
+        except Exception as e:
+            print(f"   [SCROLL ERROR] {e}")
             pass
 
     async def extract_links_with_priority_selectors(self, page):
