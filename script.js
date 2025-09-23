@@ -7,7 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let allRestaurants = [];
     let filteredRestaurants = [];
     let selectedGenre = 'all';
-    let selectedDistance = 'all';
+    let maxDistance = 1000; // 미터 단위
     let geminiAI = null;
 
     // 1. JSONL 데이터 로드 및 파싱
@@ -91,31 +91,46 @@ document.addEventListener('DOMContentLoaded', () => {
         return average.toFixed(1);
     }
 
-    // 4. 통계 업데이트
+    // 4. 통계 업데이트 (안전한 접근)
     function updateStats() {
-        totalCountElement.textContent = allRestaurants.length;
-        filteredCountElement.textContent = filteredRestaurants.length;
+        if (totalCountElement) {
+            totalCountElement.textContent = allRestaurants.length;
+        }
+        if (filteredCountElement) {
+            filteredCountElement.textContent = filteredRestaurants.length;
+        }
     }
 
     // 5. 필터링 함수
     function applyFilters() {
         filteredRestaurants = allRestaurants.filter(restaurant => {
             // 장르 필터
-            const genreMatch = selectedGenre === 'all' || 
+            const genreMatch = selectedGenre === 'all' ||
                               restaurant.food_genre === selectedGenre;
-            
-            // 거리 필터
-            let distanceMatch = true;
-            if (selectedDistance !== 'all') {
-                const walkingTime = restaurant.walking_time_min || 999;
-                distanceMatch = walkingTime <= parseInt(selectedDistance);
-            }
-            
+
+            // 거리 필터 (미터 단위)
+            const restaurantDistance = restaurant.distance_from_office_m || 0;
+            const distanceMatch = restaurantDistance <= maxDistance;
+
             return genreMatch && distanceMatch;
         });
-        
+
         updateStats();
-        console.log(`필터링 결과: ${filteredRestaurants.length}개 맛집`);
+        updateDistanceCount();
+        console.log(`필터링 결과: ${filteredRestaurants.length}개 맛집 (최대 ${maxDistance}m 이내)`);
+    }
+
+    // 거리별 레스토랑 개수 업데이트 (안전한 접근)
+    function updateDistanceCount() {
+        const distanceCountElement = document.getElementById('distance-count');
+        const distanceValueElement = document.getElementById('distance-value');
+
+        if (distanceCountElement) {
+            distanceCountElement.textContent = `(${filteredRestaurants.length}개 맛집)`;
+        }
+        if (distanceValueElement) {
+            distanceValueElement.textContent = `${maxDistance}m`;
+        }
     }
 
     // 6. 필터 이벤트 리스너 설정
@@ -131,16 +146,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
 
-        // 거리 필터 버튼들
-        const distanceButtons = document.querySelectorAll('.distance-btn');
-        distanceButtons.forEach(button => {
-            button.addEventListener('click', () => {
-                distanceButtons.forEach(btn => btn.classList.remove('active'));
-                button.classList.add('active');
-                selectedDistance = button.dataset.distance;
+        // 거리 슬라이더
+        const distanceSlider = document.getElementById('distance-slider');
+        if (distanceSlider) {
+            distanceSlider.addEventListener('input', (e) => {
+                maxDistance = parseInt(e.target.value);
                 applyFilters();
             });
-        });
+
+            // 초기 거리 설정
+            maxDistance = parseInt(distanceSlider.value);
+            applyFilters();
+        }
     }
 
     // 7. 별점 표시 함수
@@ -174,10 +191,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         resultCard.innerHTML = `
             ${restaurant.image_url ? `
-                <img src="${restaurant.image_url}" alt="${restaurant.name}" class="restaurant-image" 
+                <img src="${restaurant.image_url}" alt="${restaurant.name}" class="restaurant-image"
                      onerror="this.style.display='none'">
-            ` : ''}
-            
+            ` : `
+                <div class="restaurant-image-placeholder">
+                    <div class="image-placeholder">🍽️</div>
+                </div>
+            `}
+
             <h2>🍽️ ${restaurant.name}</h2>
             <div class="genre">${restaurant.food_genre || '기타'}</div>
             <div class="signature-menu">🏆 ${signatureMenu}</div>
@@ -192,13 +213,22 @@ document.addEventListener('DOMContentLoaded', () => {
             <p><strong>🎯 거리감:</strong> ${restaurant.distance_category || '보통'}</p>
             <p><strong>📍 위치:</strong> ${restaurant.location_description || '남대문/중구 일대'}</p>
             
-            ${restaurant.naver_map_link ? `
-                <div class="naver-link">
-                    <a href="${restaurant.naver_map_link}" target="_blank" rel="noopener">
-                        🗺️ 네이버 지도에서 보기
-                    </a>
-                </div>
-            ` : ''}
+            <div class="links-section">
+                ${restaurant.naver_map_link ? `
+                    <div class="naver-link">
+                        <a href="${restaurant.naver_map_link}" target="_blank" rel="noopener">
+                            🗺️ 네이버 지도
+                        </a>
+                    </div>
+                ` : ''}
+                ${restaurant.url ? `
+                    <div class="dining-link">
+                        <a href="${restaurant.url}" target="_blank" rel="noopener">
+                            🍴 ${restaurant.data_source === 'diningcode' ? '다이닝코드' : '식신'}
+                        </a>
+                    </div>
+                ` : ''}
+            </div>
         `;
     }
 
@@ -214,11 +244,13 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // 버튼 애니메이션
-        pickButton.style.transform = 'scale(0.95)';
-        setTimeout(() => {
-            pickButton.style.transform = 'scale(1)';
-        }, 100);
+        // 버튼 애니메이션 (안전한 접근)
+        if (pickButton) {
+            pickButton.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                if (pickButton) pickButton.style.transform = 'scale(1)';
+            }, 100);
+        }
 
         // 랜덤 선택
         const randomIndex = Math.floor(Math.random() * filteredRestaurants.length);
@@ -292,11 +324,14 @@ document.addEventListener('DOMContentLoaded', () => {
         aiButton.addEventListener('click', async () => {
             await getAIRecommendation();
         });
+
+        // 음성인식 기능 제거됨
     }
+
 
     // AI 추천 실행
     async function getAIRecommendation() {
-        const loadingDiv = document.getElementById('ai-loading');
+        // 로딩 표시용 요소는 없으므로 제거
         const userPromptElement = document.getElementById('user-prompt');
 
         try {
@@ -310,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // 로딩 표시
-            loadingDiv.style.display = 'block';
             resultCard.innerHTML = '<p class="loading">🤖 AI가 맞춤 추천을 생성 중입니다...</p>';
 
             // 현재 필터링된 레스토랑 사용
@@ -323,8 +357,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // AI 추천 요청
             const recommendation = await geminiAI.getRecommendation(userPrompt, candidateRestaurants);
 
-            // 로딩 숨기기
-            loadingDiv.style.display = 'none';
+            // 로딩 완료
 
             // AI 추천 결과 표시
             renderAIResult(recommendation);
@@ -333,8 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('AI 추천 오류:', error);
             alert(`AI 추천 중 오류가 발생했습니다: ${error.message}`);
             
-            // 로딩 숨기기
-            loadingDiv.style.display = 'none';
+            // 로딩 완료
         }
     }
 
@@ -358,12 +390,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
         resultCard.innerHTML = `
             <div class="ai-badge">🤖 AI 맞춤 추천</div>
-            
+
             ${restaurant.image_url ? `
-                <img src="${restaurant.image_url}" alt="${restaurant.name}" class="restaurant-image" 
+                <img src="${restaurant.image_url}" alt="${restaurant.name}" class="restaurant-image"
                      onerror="this.style.display='none'">
-            ` : ''}
-            
+            ` : `
+                <div class="restaurant-image-placeholder">
+                    <div class="image-placeholder">🍽️</div>
+                </div>
+            `}
+
             <h2>🍽️ ${restaurant.name}</h2>
             <div class="genre">${restaurant.food_genre || '기타'}</div>
             <div class="signature-menu">🏆 ${signatureMenu}</div>
@@ -388,13 +424,22 @@ document.addEventListener('DOMContentLoaded', () => {
             <p><strong>🎯 거리감:</strong> ${restaurant.distance_category || '보통'}</p>
             <p><strong>📍 위치:</strong> ${restaurant.location_description || '남대문/중구 일대'}</p>
             
-            ${restaurant.naver_map_link ? `
-                <div class="naver-link">
-                    <a href="${restaurant.naver_map_link}" target="_blank" rel="noopener">
-                        🗺️ 네이버 지도에서 보기
-                    </a>
-                </div>
-            ` : ''}
+            <div class="links-section">
+                ${restaurant.naver_map_link ? `
+                    <div class="naver-link">
+                        <a href="${restaurant.naver_map_link}" target="_blank" rel="noopener">
+                            🗺️ 네이버 지도
+                        </a>
+                    </div>
+                ` : ''}
+                ${restaurant.url ? `
+                    <div class="dining-link">
+                        <a href="${restaurant.url}" target="_blank" rel="noopener">
+                            🍴 ${restaurant.data_source === 'diningcode' ? '다이닝코드' : '식신'}
+                        </a>
+                    </div>
+                ` : ''}
+            </div>
         `;
 
         console.log('AI 추천 완료:', recommendation);

@@ -3,13 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>점심 맛집 추천기 - 그레이츠숙례 기준</title>
+    <title>그레이츠 숙례 근처의 맛집을 찾아서...</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="modern_styles.css">
 </head>
 <body>
     <div class="container">
-        <h1>🍽️ 오늘의 점심 맛집</h1>
-        <p>그레이츠숙례에서 남대문 일대 맛집 중 랜덤 추천!</p>
+        <!-- Header with brand integration -->
+        <div class="header">
+            <div class="brand-logos">
+                <img src="지안어드바이저리.png" alt="지안어드바이저리" class="brand-logo">
+            </div>
+            <h1>🍽️ 오늘의 점심 맛집</h1>
+            <p class="subtitle">그레이츠숙례 근처 남대문 일대 맛집 중 랜덤 추천!</p>
+        </div>
+
+        <!-- Main content area -->
+        <div class="content">
 
         <!-- 장르 필터 -->
         <div class="filter-section">
@@ -20,8 +30,8 @@
                 <button class="genre-btn" data-genre="중식">중식</button>
                 <button class="genre-btn" data-genre="일식">일식</button>
                 <button class="genre-btn" data-genre="양식">양식</button>
-                <button class="genre-btn" data-genre="분식/간식">분식</button>
-                <button class="genre-btn" data-genre="카페/디저트">카페</button>
+                <button class="genre-btn" data-genre="분식/간식">분식/간식</button>
+                <button class="genre-btn" data-genre="카페/디저트">카페/디저트</button>
                 <button class="genre-btn" data-genre="기타">기타</button>
             </div>
         </div>
@@ -29,11 +39,26 @@
         <!-- 거리 필터 -->
         <div class="filter-section">
             <h3>🚶‍♂️ 거리별 추천</h3>
-            <div class="distance-filters">
-                <button class="distance-btn active" data-distance="all">전체</button>
-                <button class="distance-btn" data-distance="5">5분 이내</button>
-                <button class="distance-btn" data-distance="10">10분 이내</button>
-                <button class="distance-btn" data-distance="15">15분 이내</button>
+            <div class="distance-slider-container">
+                <div class="slider-header">
+                    <span class="slider-label">최대 거리:</span>
+                    <span class="slider-value" id="distance-value">1000m</span>
+                    <span class="restaurant-count" id="distance-count">(0개 맛집)</span>
+                </div>
+                <input type="range"
+                       id="distance-slider"
+                       class="distance-slider"
+                       min="100"
+                       max="1000"
+                       value="1000"
+                       step="50">
+                <div class="slider-ticks">
+                    <span>100m</span>
+                    <span>300m</span>
+                    <span>500m</span>
+                    <span>700m</span>
+                    <span>1000m</span>
+                </div>
             </div>
         </div>
 
@@ -48,14 +73,8 @@
             <div class="prompt-input-group">
                 <textarea
                     id="user-prompt"
-                    placeholder="원하는 조건을 자유롭게 입력하세요:
-
-예시:
-• 따뜻한 국물 요리가 먹고 싶어
-• 매운 음식 못 먹어서 순한 맛 한식 추천
-• 데이트하기 좋은 분위기 있는 곳
-• 저렴하고 양 많은 중국집"
-                    rows="3"></textarea>
+                    placeholder="원하는 조건을 자유롭게 입력하세요 (예: 따뜻한 국물 요리가 먹고 싶어)"
+                    rows="2"></textarea>
             </div>
         </div>
 
@@ -65,10 +84,8 @@
             <button id="ai-button" class="ai-button">🤖 AI 맞춤 추천</button>
         </div>
 
-        <!-- 통계 -->
-        <div class="stats" id="stats">
-            <p>총 <span id="total-count">0</span>개 맛집 | 필터링된 <span id="filtered-count">0</span>개</p>
-        </div>
+
+        </div> <!-- content closing -->
     </div>
 
     <script src="config.js"></script>
